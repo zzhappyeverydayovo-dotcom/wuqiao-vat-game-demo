@@ -1,0 +1,86 @@
+{
+  "market": {
+    "file": "market.webp",
+    "size": [
+      941,
+      1670
+    ],
+    "bounds": [
+      0,
+      0,
+      941,
+      1670
+    ],
+    "bytes": 401594
+  },
+  "festival": {
+    "file": "festival.webp",
+    "size": [
+      941,
+      1672
+    ],
+    "bounds": [
+      0,
+      0,
+      941,
+      1672
+    ],
+    "bytes": 309204
+  },
+  "acrobat-market": {
+    "file": "acrobat-market.webp",
+    "size": [
+      1254,
+      1254
+    ],
+    "bounds": [
+      41,
+      30,
+      1252,
+      1254
+    ],
+    "bytes": 250358
+  },
+  "acrobat-festival": {
+    "file": "acrobat-festival.webp",
+    "size": [
+      1254,
+      1254
+    ],
+    "bounds": [
+      0,
+      9,
+      1238,
+      1254
+    ],
+    "bytes": 269502
+  },
+  "drum": {
+    "file": "drum.webp",
+    "size": [
+      1374,
+      1145
+    ],
+    "bounds": [
+      0,
+      0,
+      1371,
+      1129
+    ],
+    "bytes": 379054
+  },
+  "table": {
+    "file": "table.webp",
+    "size": [
+      1512,
+      1040
+    ],
+    "bounds": [
+      0,
+      19,
+      1502,
+      1040
+    ],
+    "bytes": 205760
+  }
+}

@@ -1,3 +1,4 @@
+import {THEMES,LESSON_LENGTH,lessonFrame,createPracticeState} from './tutorial.js';
 import {drawLegRig} from './rig.js';
 import {loadImageCandidates} from './loader.js';
 import {LEVELS,createGame,step,impulse,clamp,upgradeCost,sanitizeSave} from './engine.js';
@@ -7,6 +8,49 @@ let save;try{save=sanitizeSave(JSON.parse(localStorage.getItem('wuqiao-vat-v1')|
 let state=createGame(0,save),selectedLevel=0,screen='intro',lastTime=0,worldTime=0,toastUntil=0,stampUntil=0,cheerEnergy=0,settled=false;
 let assets={},loaded=false,particles=[],bubbles=[],lastUi=0,spinPhase=0,audioCtx,master,seed=34,lastCatchAt=-10;
 const learnedStages=new Set();
+let tutorial=null;
+const stageText=text=>text.replaceAll('大缸',THEMES[state.level].prop).replaceAll('缸',THEMES[state.level].short);
+const tutorialRoot=document.createElement('section');tutorialRoot.id='tutorial';tutorialRoot.hidden=true;$('game').appendChild(tutorialRoot);
+function startTutorial(level){
+  releaseAll();screen='lesson';tutorial={level,time:0,paused:false,watched:false,result:''};
+  $('overlay').classList.add('hidden');$('game').classList.add('teaching');tutorialRoot.hidden=false;
+  tutorialRoot.innerHTML=`<div class="lesson-head"><span class="eyebrow">第 ${level+1} 场 · ${LEVELS[level].venue} · ${THEMES[level].costume}</span><h2>${THEMES[level].prop} · ${LEVELS[level].lesson}</h2><div class="lesson-steps">${['看低侧','先单接',level===1?'扶平':'分拍接','松开','合力蹬'].map((x,i)=>`<span data-step="${i}">${x}</span>`).join('')}</div><h3 id="lesson-title"></h3><p id="lesson-copy"></p><div class="lesson-meter"><span id="lesson-zone"></span><b id="lesson-needle"></b></div></div><div class="lesson-bottom"><div class="lesson-keys"><button id="lesson-left"><b>左脚 A</b><small>松开</small></button><button id="lesson-right"><b>右脚 D</b><small>松开</small></button></div><p id="lesson-note">先看一次完整动作，再亲手练习</p><div class="lesson-actions"><button id="lesson-pause">暂停演示</button><button id="lesson-replay">重播动画</button><button id="lesson-go" disabled>看完后慢练</button></div></div>`;
+  bindPad('left',-1,$('lesson-left'));bindPad('right',1,$('lesson-right'));
+  $('lesson-pause').onclick=()=>{tutorial.paused=!tutorial.paused;releaseAll();$('lesson-pause').textContent=tutorial.paused?'继续':'暂停';};
+  $('lesson-replay').onclick=()=>startTutorial(level);
+  $('lesson-go').onclick=()=>{if(tutorial.result==='success'){if(level>=save.unlocked){location.reload();return;}learnedStages.add(level);tutorial=null;tutorialRoot.hidden=true;$('game').classList.remove('teaching');startRound(level);}else if(tutorial.watched)startPractice();};
+}
+function startPractice(){releaseAll();screen='practice';tutorial.paused=false;tutorial.result='';state=createPracticeState(tutorial.level,save);$('lesson-pause').textContent='暂停练习';$('lesson-go').disabled=true;$('lesson-go').textContent='完成一次接蹬';$('lesson-note').textContent='慢速练习 · 不计时、不扣赏钱 · 正式场恢复正常速度';}
+function tickTutorial(dt){
+  if(screen==='lesson'){
+    if(!tutorial.paused)tutorial.time=Math.min(LESSON_LENGTH,tutorial.time+dt);
+    const f=lessonFrame(tutorial.level,tutorial.time);state=f.state;
+    if(f.done){tutorial.watched=true;$('lesson-go').disabled=false;$('lesson-go').textContent='跟着练一次';}
+    showLesson(f.title,f.copy,f.index,f.keys);
+  }else if(screen==='practice'){
+    if(!tutorial.paused&&!tutorial.result){let remaining=dt*.55;while(remaining>0){const tick=Math.min(remaining,1/60);step(state,tick,inputs);state.events.length=0;remaining-=tick;if(state.catches||state.mode==='lost')break;}
+      if(state.catches){tutorial.result='success';releaseAll();$('lesson-go').disabled=false;$('lesson-go').textContent=tutorial.level<save.unlocked?'正式开场 ↗':'回到小院 · 闯关解锁';}
+      else if(state.mode==='lost'){tutorial.result='retry';releaseAll();$('lesson-go').disabled=false;$('lesson-go').textContent='再练一次';}
+    }
+    let title,copy,index;
+    if(tutorial.result==='success'){title='练会了！这一蹬接得漂亮';copy='正式场左右交替、连续蹬得更高。准备好就开场。';index=4;}
+    else if(tutorial.result==='retry'){title='没关系，再来一次';copy=stageText(state.reason);index=0;}
+    else if(state.phase==='flight'){const ready=state.height<=LEVELS[state.level].catchHeight;title=ready?'现在单独按 D，右脚先接':'先等右侧金圈亮';copy='不要同时按 A、D；先接向下倾斜的一侧。';index=ready?1:0;}
+    else if(state.phase==='splitcatch'){const ready=state.phaseTime>=.18;title=ready?'现在单独按 A，左脚接上':'松开 D，等左侧金圈亮';copy=ready?'补上另一脚，完成分拍卸力。':'先别按 A，两只脚需要错开时间接。';index=2;}
+    else {const flat=Math.abs(state.angle)<=.055;title=flat?'扶平了：先松开，再同时按 A + D':'按住 D，让指针进入绿区';copy=flat?'双脚合力蹬起，完成这一组动作。':'右脚继续托起低侧；指针进绿区就松手。';index=flat?4:2;}
+    showLesson(title,copy,index,inputs);
+  }
+}
+function showLesson(title,copy,index,keys){
+  $('lesson-title').textContent=title;$('lesson-copy').textContent=copy;
+  tutorialRoot.querySelectorAll('[data-step]').forEach(el=>el.classList.toggle('active',Number(el.dataset.step)===index));
+  for(const side of ['left','right']){const b=$('lesson-'+side);b.classList.toggle('pressed',keys[side]);b.querySelector('small').textContent=keys[side]?'按下 / 按住':'松开';}
+  const split=state.phase==='splitcatch';$('lesson-zone').style.cssText=split?'left:25.7%;width:54.3%;background:#d4a653':'left:45.5%;width:9%;background:#728d6a';
+  $('lesson-needle').style.left=`${split?Math.min(100,state.phaseTime/.7*100):50+clamp(state.angle/.58,-1,1)*47}%`;
+  tutorialRoot.dataset.mode=screen;tutorialRoot.dataset.step=String(index);tutorialRoot.dataset.result=tutorial.result;
+}
+function pauseLesson(){if(tutorial){releaseAll();tutorial.paused=true;$('lesson-pause').textContent='继续';}}
+
 const inputs={left:false,right:false},pressed={left:new Set(),right:new Set()};
 const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
 const persist=()=>{try{localStorage.setItem('wuqiao-vat-v1',JSON.stringify(save));}catch{}};
@@ -14,13 +58,14 @@ function syncSave(){ $('coins').textContent=save.coins.toLocaleString('zh-CN');$
 function initAudio(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;audioCtx=new AC();master=audioCtx.createGain();master.gain.value=.25;master.connect(audioCtx.destination);}if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});}
 function tone(freq,duration=.15,type='sine',volume=.2,delay=0){if(!save.sound||!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain(),t=audioCtx.currentTime+delay;o.type=type;o.frequency.setValueAtTime(freq,t);o.frequency.exponentialRampToValueAtTime(Math.max(60,freq*.6),t+duration);g.gain.setValueAtTime(.001,t);g.gain.exponentialRampToValueAtTime(volume,t+.008);g.gain.exponentialRampToValueAtTime(.001,t+duration);o.connect(g);g.connect(master);o.start(t);o.stop(t+duration+.02);o.onended=()=>{o.disconnect();g.disconnect();};}
 function clap(count=3){if(!save.sound||!audioCtx)return;for(let i=0;i<count;i++){const duration=.075;const b=audioCtx.createBuffer(1,audioCtx.sampleRate*duration,audioCtx.sampleRate),d=b.getChannelData(0);for(let j=0;j<d.length;j++)d[j]=(random()*2-1)*Math.exp(-j/d.length*8);const source=audioCtx.createBufferSource(),g=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();filter.type='highpass';filter.frequency.value=1000;g.gain.value=.15;source.buffer=b;source.connect(filter);filter.connect(g);g.connect(master);source.start(audioCtx.currentTime+i*.13);source.onended=()=>{source.disconnect();filter.disconnect();g.disconnect();};}}
-function showToast(text,duration=2){$('toast').textContent=text;$('toast').classList.add('show');toastUntil=worldTime+duration;}
+function showToast(text,duration=2){$('toast').textContent=stageText(text);$('toast').classList.add('show');toastUntil=worldTime+duration;}
 function releaseAll(){for(const side of ['left','right']){pressed[side].clear();inputs[side]=false;$(side).classList.remove('pressed');}}
 function startRound(level=selectedLevel){
   selectedLevel=clamp(level,0,save.unlocked-1);state=createGame(selectedLevel,save);settled=false;particles=[];bubbles=[];cheerEnergy=0;releaseAll();
   $('combo-stamp').classList.remove('show');$('pause').textContent='Ⅱ';$('pause').setAttribute('aria-label','暂停游戏');
   const begin=()=>{learnedStages.add(selectedLevel);screen='playing';$('overlay').classList.add('hidden');initAudio();tone(180,.5,'sine',.45);showToast('锣声一响，好戏开场',1.3);updateUI();};
   if(learnedStages.has(selectedLevel)){begin();return;}
+  if(selectedLevel>0){startTutorial(selectedLevel);return;}
   screen='brief';const l=LEVELS[selectedLevel];
   const lessons=[
     ['双脚一起接，练准节奏','脚力满后，双键起缸。','松开双键，等金色脚圈亮起，再同时按下。','完成三连蹬；抢拍两次会断连。'],
@@ -35,13 +80,14 @@ function resumeGame(){if(screen!=='paused')return;screen='playing';$('pause').te
 function buyUpgrade(kind){const cost=upgradeCost(kind,save[kind]);if(save[kind]>=3||save.coins<cost)return;save.coins-=cost;save[kind]++;persist();syncSave();tone(780,.2);tone(1040,.3,'sine',.15,.1);renderResults();}
 function shopRow(kind,title,copy){const rank=save[kind],cost=upgradeCost(kind,rank);return `<div class="shop-row"><div><b>${title} <span style="opacity:.45">${rank}/3</span></b><small>${copy}</small></div><button class="buy" data-upgrade="${kind}" ${rank>=3||save.coins<cost?'disabled':''}>${rank>=3?'已练满':`${cost} 文 · 提升`}</button></div>`;}
 function finish(won){if(settled)return;settled=true;releaseAll();screen='result';selectedLevel=won?Math.min(2,state.level+1):state.level;save.rounds++;save.best=Math.max(save.best,Math.floor(state.bestStreak));if(won){save.unlocked=Math.max(save.unlocked,Math.min(3,state.level+2));const bonus=20*(state.level+1);save.coins+=bonus;state.bonus=bonus;clap(7);[440,554,659,880].forEach((f,i)=>tone(f,.4,'sine',.22,i*.13));}else{state.bonus=0;tone(180,.4,'triangle',.2);}persist();syncSave();setTimeout(()=>{if(screen==='result')renderResults();},1600);}
-function renderResults(){const won=state.mode==='won';$('panel').innerHTML=`<span class="eyebrow">${won?'好功夫，值得这个赏！':'台上一分钟，台下十年功'}</span><h2>${won?(state.level===2?'压轴，满堂彩！':'这一场，漂亮！'):'再练一场'}</h2><p class="result-reason">${won?`连续完成 ${state.catches} 蹬，最后一记接稳，街坊们为你喝彩！`:state.reason}</p><div class="result-score"><div><strong>${state.catches}<small> / ${LEVELS[state.level].target}</small></strong>连续接蹬完成</div><div><strong>+${state.tips+(state.bonus||0)}</strong>本场赏钱${won?`（含${state.bonus}文彩头）`:''}</div></div><div class="shop"><div class="progress-caption"><span>赏钱练功 · 下场更出彩</span><b>钱袋 ${save.coins} 文</b></div>${shopRow('skill','基本功','扩大稳定区，加快脚力积累')}${shopRow('fame','人气','每级增加 30% 喝彩赏钱')}</div><div class="level-chooser">${LEVELS.map((l,i)=>`<button data-level="${i}" class="${selectedLevel===i?'selected':''}" ${i>=save.unlocked?'disabled':''}>${i>=save.unlocked?'未解锁':`${i+1} · ${l.name}`}</button>`).join('')}</div><button class="primary" id="next">${selectedLevel>state.level?'下一场，接着来':'再上场，露一手'} <span>↗</span></button><p class="panel-foot">赏钱已存好 · 最长连稳纪录 ${save.best} 秒</p>`;$('overlay').classList.remove('hidden');document.querySelectorAll('[data-upgrade]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.upgrade));document.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>{selectedLevel=Number(b.dataset.level);renderResults();$('next').textContent=`上场 · ${LEVELS[selectedLevel].name} ↗`;});$('next').onclick=()=>startRound(selectedLevel);}
-function showAbout(){const previous=screen;if(screen==='playing')pauseGame();screen='about';releaseAll();$('panel').innerHTML=`<span class="eyebrow">绝活小记</span><h2>双脚之上<br>力与巧的功夫</h2><div class="about-copy"><p>蹬大缸是吴桥杂技演出中可见的蹬技：艺人仰卧，用脚托举、蹬转大缸，展现力量、节奏与平衡。</p><p>这个游戏以蹬缸为灵感，将双脚发力转化为双按钮操作。小院、服饰与青花纹样是美术演绎，关卡、赏钱与“连环蹬缸”大招是游戏化改编，并非真实节目的动作复原。</p><p>资料：<a href="https://web.cmc.hebtv.com/cms/rmt0336/19/19js/zx/tt/12056931.shtml" target="_blank" rel="noopener">《非遗里的中国》河北·吴桥杂技篇 ↗</a></p></div><button class="primary" id="close-about">回到小院 <span>↗</span></button>`;$('overlay').classList.remove('hidden');$('close-about').onclick=()=>{if(previous==='playing'||previous==='paused'){screen='paused';resumeGame();}else if(previous==='result'){screen='result';renderResults();}else{location.reload();}};}
-function bindPad(side,foot){const b=$(side);const down=(key)=>{if(screen!=='playing')return;initAudio();if(pressed[side].has(key))return;pressed[side].add(key);inputs[side]=true;b.classList.add('pressed');if(!inputs[side==='left'?'right':'left'])impulse(state,foot);};const up=key=>{pressed[side].delete(key);inputs[side]=pressed[side].size>0;b.classList.toggle('pressed',inputs[side]);};b.addEventListener('pointerdown',e=>{e.preventDefault();if(screen!=='playing')return;b.setPointerCapture(e.pointerId);down(e.pointerId);});for(const name of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(name,e=>up(e.pointerId));b.addEventListener('contextmenu',e=>e.preventDefault());return {down,up};}
+function renderResults(){const won=state.mode==='won';$('panel').innerHTML=`<span class="eyebrow">${won?'好功夫，值得这个赏！':'台上一分钟，台下十年功'}</span><h2>${won?(state.level===2?'压轴，满堂彩！':'这一场，漂亮！'):'再练一场'}</h2><p class="result-reason">${won?`连续完成 ${state.catches} 蹬，最后一记接稳，街坊们为你喝彩！`:stageText(state.reason)}</p><div class="result-score"><div><strong>${state.catches}<small> / ${LEVELS[state.level].target}</small></strong>连续接蹬完成</div><div><strong>+${state.tips+(state.bonus||0)}</strong>本场赏钱${won?`（含${state.bonus}文彩头）`:''}</div></div><div class="shop"><div class="progress-caption"><span>赏钱练功 · 下场更出彩</span><b>钱袋 ${save.coins} 文</b></div>${shopRow('skill','基本功','扩大稳定区，加快脚力积累')}${shopRow('fame','人气','每级增加 30% 喝彩赏钱')}</div><div class="level-chooser">${LEVELS.map((l,i)=>`<button data-level="${i}" class="${selectedLevel===i?'selected':''}" ${i>=save.unlocked?'disabled':''}>${i>=save.unlocked?'未解锁':`${i+1} · ${l.name}`}</button>`).join('')}</div><button class="primary" id="next">${selectedLevel>state.level?'下一场，接着来':'再上场，露一手'} <span>↗</span></button><p class="panel-foot">赏钱已存好 · 最长连稳纪录 ${save.best} 秒</p>`;$('overlay').classList.remove('hidden');document.querySelectorAll('[data-upgrade]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.upgrade));document.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>{selectedLevel=Number(b.dataset.level);renderResults();$('next').textContent=`上场 · ${LEVELS[selectedLevel].name} ↗`;});$('next').onclick=()=>startRound(selectedLevel);}
+function showAbout(){const previous=screen;if(screen==='playing')pauseGame();screen='about';releaseAll();$('panel').innerHTML=`<span class="eyebrow">绝活小记</span><h2>双脚之上<br>力与巧的功夫</h2><div class="about-copy"><p>蹬大缸是吴桥杂技演出中可见的蹬技：艺人仰卧，用脚托举、蹬转大缸，展现力量、节奏与平衡。</p><p>本游戏将蹬缸、蹬鼓、蹬桌转化为双按钮操作。小院、集市、灯会及服饰是美术演绎；三关顺序与接蹬规则是游戏设计，并非传统节目的固定等级或动作复原。</p><p>资料：<a href="https://web.cmc.hebtv.com/cms/rmt0336/19/19js/zx/tt/12056931.shtml" target="_blank" rel="noopener">《非遗里的中国》河北·吴桥杂技篇 ↗</a> · <a href="https://xinwen.bjd.com.cn/content/s6986ba72d5dedd6a22dd6364.html" target="_blank" rel="noopener">蹬鼓报道</a> · <a href="https://web.cmc.hebtv.com/cms/rmt0336/19/19js/zx/lbhj/12022315.shtml" target="_blank" rel="noopener">蹬桌报道</a></p></div><button class="primary" id="close-about">回到小院 <span>↗</span></button>`;$('overlay').classList.remove('hidden');$('close-about').onclick=()=>{if(previous==='playing'||previous==='paused'){screen='paused';resumeGame();}else if(previous==='result'){screen='result';renderResults();}else{location.reload();}};}
+function bindPad(side,foot,b=$(side)){const down=(key)=>{if(screen!=='playing'&&!(screen==='practice'&&!tutorial.paused&&!tutorial.result))return;initAudio();if(pressed[side].has(key))return;pressed[side].add(key);inputs[side]=true;b.classList.add('pressed');if(!inputs[side==='left'?'right':'left'])impulse(state,foot);};const up=key=>{pressed[side].delete(key);inputs[side]=pressed[side].size>0;b.classList.toggle('pressed',inputs[side]);};b.addEventListener('pointerdown',e=>{e.preventDefault();if(screen!=='playing'&&!(screen==='practice'&&!tutorial.paused&&!tutorial.result))return;b.setPointerCapture(e.pointerId);down(e.pointerId);});for(const name of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(name,e=>up(e.pointerId));b.addEventListener('contextmenu',e=>e.preventDefault());return {down,up};}
 const left=bindPad('left',-1),right=bindPad('right',1);
-document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['a','d','arrowleft','arrowright',' '].includes(k)&&screen==='playing')e.preventDefault();if(k==='a'||k==='arrowleft')left.down(k);if(k==='d'||k==='arrowright')right.down(k);if(k==='escape'||k==='p'){if(screen==='playing')pauseGame();else if(screen==='paused')resumeGame();}});
+document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['a','d','arrowleft','arrowright',' '].includes(k)&&(screen==='playing'||screen==='practice'))e.preventDefault();if(k==='a'||k==='arrowleft')left.down(k);if(k==='d'||k==='arrowright')right.down(k);if(k==='escape'||k==='p'){if(screen==='playing')pauseGame();else if(screen==='paused')resumeGame();}});
 document.addEventListener('keyup',e=>{const k=e.key.toLowerCase();left.up(k);right.up(k);});
-window.addEventListener('blur',()=>{releaseAll();if(screen==='playing')pauseGame();});document.addEventListener('visibilitychange',()=>{if(document.hidden&&screen==='playing')pauseGame();});
+window.addEventListener('blur',()=>{releaseAll();if(screen==='playing')pauseGame();else pauseLesson();});document.addEventListener('visibilitychange',()=>{if(document.hidden){if(screen==='playing')pauseGame();else pauseLesson();}});
+document.querySelectorAll('[data-preview]').forEach(b=>b.onclick=()=>startTutorial(Number(b.dataset.preview)));
 $('start').onclick=()=>startRound();$('pause').onclick=()=>screen==='playing'?pauseGame():screen==='paused'?resumeGame():null;$('sound').onclick=()=>{save.sound=!save.sound;persist();syncSave();initAudio();if(save.sound)tone(720,.12);};$('about').onclick=showAbout;
 function tipParticles(value,tier){const n=Math.min(12,2+tier*2);for(let i=0;i<n;i++){const side=i%2;particles.push({type:'coin',x:side?485:60,y:520+random()*100,startX:side?485:60,startY:520+random()*100,life:0,duration:.8+random()*.35,delay:i*.045,amount:value,rotate:random()*6});}bubbles.push({text:`+${value} 文`,x:455,y:130,life:0,duration:1.15,type:'money'});tone(1100+tier*80,.13,'sine',.11);}
 function cheer(tier){cheerEnergy=Math.min(1,cheerEnergy+.7);const texts=tier>=5?['绝了！','好功夫！','再来一手！']:tier>=3?['好！','稳当！','有真功夫！']:['好！','漂亮！'];bubbles.push({text:texts[Math.floor(random()*texts.length)],x:70+random()*40,y:405+random()*80,life:0,duration:2.3,type:'cheer'});bubbles.push({text:texts[Math.floor(random()*texts.length)],x:440+random()*25,y:435+random()*80,life:0,duration:2.1,type:'cheer'});clap(tier+1);$('combo-stamp').innerHTML=`<span>${tier>=5?'满堂彩':tier>=3?'好功夫':'有人赏'}</span><b>×${tier}</b>`;$('combo-stamp').classList.add('show');stampUntil=worldTime+2.6;if(navigator.vibrate&&save.sound)navigator.vibrate(25);}
@@ -73,7 +119,9 @@ function updateUI(){
   const l=LEVELS[state.level],flight=state.phase==='flight',chain=state.phase!=='balance',ready=state.power>=100;
   const landing=flight&&state.vy<0&&state.height<=l.catchHeight,final=state.kicks===l.target;
   const remaining=Math.ceil(Math.max(0,l.duration-state.elapsed));
-  $('level-name').textContent=`第 ${String(state.level+1).padStart(2,'0')} 场 · ${l.name}`;
+  $('level-name').textContent=`第 ${state.level+1} 场 · ${l.venue} · ${THEMES[state.level].prop}`;
+  canvas.setAttribute('aria-label',`艺人双脚蹬${THEMES[state.level].short}，${LEVELS[state.level].lesson}；使用左右按钮操作`);
+  document.querySelector('.edition').textContent=`吴桥杂技 · ${THEMES[state.level].prop}`;
   $('timer').textContent=`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`;
   $('stable-seconds').textContent=state.catches;$('target-seconds').textContent=` / ${l.target} 蹬`;
   $('objective').textContent=chain?'连环蹬缸 · 最后一记接稳过关':`稳缸蓄势 · 本场连续 ${l.target} 蹬`;
@@ -128,6 +176,7 @@ function updateUI(){
   $('left-text').textContent=buttonLeft;$('right-text').textContent=buttonRight;
   $('left').setAttribute('aria-label',chain?`左脚：${buttonLeft}`:'左脚发力，向右扶正');
   $('right').setAttribute('aria-label',chain?`右脚：${buttonRight}`:'右脚发力，向左扶正');
+  for(const id of ['objective','hint','act-label','balance-label','crowd-text','streak-label','left-text','right-text'])$(id).textContent=stageText($(id).textContent);
   $('left-cue').style.opacity=chain?0:state.tapLeft*.8;$('right-cue').style.opacity=chain?0:state.tapRight*.8;
 }
 function drawImageCover(img,x,y,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale;ctx.drawImage(img,(img.width-sw)/2,(img.height-sh)/2,sw,sh,x,y,w,h);}
@@ -140,14 +189,15 @@ function legBend(){
   if(state.phase==='celebrate')return 100*Math.sin(Math.min(1,(worldTime-lastCatchAt)/.7)*Math.PI);
   return -Math.max(state.tapLeft,state.tapRight)*8;
 }
-function drawActor(angle){drawLegRig(ctx,assets.acrobat,137,464,330,legBend(),state.phase==='support'||state.phase==='splitcatch'?state.angle*2.4:0);}
+function drawActor(angle){drawLegRig(ctx,assets[THEMES[state.level].actor],137,464,330,legBend(),state.phase==='support'||state.phase==='splitcatch'?state.angle*2.4:0);}
 function drawVat(angle){
   const airborne=state.phase==='flight',bend=airborne?0:legBend()*330/1254;
   const x=271,y=489-state.height*.44+bend;
   ctx.save();ctx.translate(x,y);ctx.rotate(angle);
   const sway=1+Math.sin(spinPhase)*.008;ctx.scale(sway,1);
   ctx.shadowColor='#14202b38';ctx.shadowBlur=12;ctx.shadowOffsetY=6;
-  ctx.drawImage(assets.vat,14,60,1225,1135,-145,-263,290,269);ctx.shadowColor='transparent';
+  const theme=THEMES[state.level],[x0,y0,x1,y1]=theme.bounds,w=theme.width,h=w*(y1-y0)/(x1-x0);
+  ctx.drawImage(assets[theme.object],x0,y0,x1-x0,y1-y0,-w/2,6-h,w,h);ctx.shadowColor='transparent';
   if(airborne&&state.vy>0){
     ctx.strokeStyle='#fff1c6aa';ctx.lineWidth=2.5;
     for(const dx of [-158,158]){ctx.beginPath();ctx.moveTo(dx,-120);ctx.lineTo(dx,10+state.kicks*9);ctx.stroke();}
@@ -177,9 +227,9 @@ function render(dt){
   ctx.clearRect(0,0,540,960);if(!loaded)return;
   ctx.save();
   // Fixed stage framing: the performer and courtyard keep their size throughout the chain.
-  drawImageCover(assets.background,0,0,540,960);
+  drawImageCover(assets[THEMES[state.level].background],0,0,540,960);
   cheerEnergy=Math.max(0,cheerEnergy-dt*.4);
-  if(cheerEnergy>.05){const img=assets.background;for(const [sx,sw,dx,dw,phase] of [[0,.22,0,119,0],[.78,.22,421,119,2]]){
+  if(cheerEnergy>.05){const img=assets[THEMES[state.level].background];for(const [sx,sw,dx,dw,phase] of [[0,.22,0,119,0],[.78,.22,421,119,2]]){
     const jump=Math.sin(worldTime*15+phase)*cheerEnergy*3;ctx.save();ctx.beginPath();ctx.rect(dx,370,dw,310);ctx.clip();ctx.drawImage(img,sx*img.width,.38*img.height,sw*img.width,.38*img.height,dx,365+jump,dw,365);ctx.restore();}}
   ctx.fillStyle='#30271c2e';ctx.beginPath();ctx.ellipse(294,778,130,18,0,0,Math.PI*2);ctx.fill();
   const angle=screen==='intro'?Math.sin(worldTime*.7)*.035:clamp(state.angle,-.63,.63);
@@ -190,7 +240,7 @@ function render(dt){
   drawBubbles(dt);drawParticles(dt);
   if(screen==='playing'&&state.phase==='balance'&&state.danger>.5){ctx.fillStyle=`rgba(155,55,30,${Math.sin(worldTime*8)*.025+state.danger*.035})`;ctx.fillRect(0,0,540,960);}
 }
-function frame(now){const dt=Math.min((now-lastTime)/1000||.016,.12);lastTime=now;const animate=screen!=='paused'&&screen!=='about';if(animate){worldTime+=dt;spinPhase+=dt*(screen==='playing'?state.spin:0.7)*3;}if(screen==='playing'){let remaining=dt;while(remaining>0&&screen==='playing'){const tick=Math.min(remaining,1/60);step(state,tick,inputs);processEvents();remaining-=tick;}}if(animate||screen==='intro')render(animate?dt:0);if(worldTime-lastUi>.065){updateUI();lastUi=worldTime;}if(worldTime>toastUntil)$('toast').classList.remove('show');if(worldTime>stampUntil)$('combo-stamp').classList.remove('show');requestAnimationFrame(frame);}
+function frame(now){const dt=Math.min((now-lastTime)/1000||.016,.12);lastTime=now;const animate=screen!=='paused'&&screen!=='about';if(animate){worldTime+=dt;spinPhase+=dt*(screen==='playing'?state.spin:0.7)*3;}if(screen==='playing'){let remaining=dt;while(remaining>0&&screen==='playing'){const tick=Math.min(remaining,1/60);step(state,tick,inputs);processEvents();remaining-=tick;}}if(tutorial)tickTutorial(dt);if(animate||screen==='intro')render(animate?dt:0);if(worldTime-lastUi>.065){updateUI();lastUi=worldTime;}if(worldTime>toastUntil)$('toast').classList.remove('show');if(worldTime>stampUntil)$('combo-stamp').classList.remove('show');requestAnimationFrame(frame);}
 function roundBox(context,x,y,w,h,r){
   if(typeof context.roundRect==='function'){context.roundRect(x,y,w,h,r);return;}
   context.moveTo(x+r,y);context.lineTo(x+w-r,y);context.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -201,18 +251,18 @@ function roundBox(context,x,y,w,h,r){
 function syncLayout(){document.getElementById('game').style.setProperty('--u',document.getElementById('game').getBoundingClientRect().width/100+'px');}
 window.addEventListener('resize',syncLayout);
 async function loadAssets(){
-  const files={background:'courtyard',acrobat:'acrobat',vat:'vat'};
+  const files={background:'mobile/courtyard',acrobat:'mobile/acrobat',vat:'mobile/vat',...Object.fromEntries(['market','festival','acrobat-market','acrobat-festival','drum','table'].map(x=>[x,'stages/'+x]))};
   const embedded=typeof EMBEDDED_ASSETS!=='undefined'?EMBEDDED_ASSETS:{};
   let count=0;
-  window.WuqiaoBoot.status('正在准备画面 0 / 3');
+  window.WuqiaoBoot.status('正在准备画面 0 / 9');
   await Promise.all(Object.entries(files).map(async([key,file])=>{
-    const image=await loadImageCandidates([embedded[key],embedded[key]?null:`assets/mobile/${file}.webp`,`assets/${file}.png`]);
-    assets[key]=image;count++;window.WuqiaoBoot.status(`场子已备 ${count} / 3`);
+    const image=await loadImageCandidates([embedded[key],embedded[key]?null:`assets/${file}.webp`,`assets/${file.replace('mobile/','')}.png`]);
+    assets[key]=image;count++;window.WuqiaoBoot.status(`场子已备 ${count} / 9`);
   }));
   loaded=true;
   render(0);
   window.WuqiaoBoot.ready();
 }
-window.WuqiaoBoot.status('正在启动游戏 · 三阶功夫版 v5');
+window.WuqiaoBoot.status('正在启动游戏 · 场景与教学版 v6');
 syncLayout();syncSave();updateUI();requestAnimationFrame(frame);
 loadAssets().catch(error=>{window.WuqiaoBoot.fail();console.error('Asset loading failed',error);});

@@ -1,7 +1,7 @@
 export const LEVELS = [
   {name:'同接起缸',lesson:'双脚同接',venue:'杂技小院',target:3,heights:[65,110,155],duration:70,wind:1.35,rate:1,catchHeight:54,slow:.36},
-  {name:'偏缸扶正',lesson:'单脚扶正',venue:'运河集市',target:4,heights:[80,125,170,215],duration:85,wind:2.1,rate:1.5,catchHeight:43,slow:.27},
-  {name:'错步卸力',lesson:'分脚接缸',venue:'吴桥大会',target:5,heights:[95,140,185,230,275],duration:100,wind:2.9,rate:2,catchHeight:34,slow:.20}
+  {name:'偏鼓扶正',lesson:'单脚扶正',venue:'运河集市',target:4,heights:[80,125,170,215],duration:85,wind:2.1,rate:1.5,catchHeight:43,slow:.27},
+  {name:'错步卸力',lesson:'分脚接桌',venue:'灯会夜场',target:5,heights:[95,140,185,230,275],duration:100,wind:2.9,rate:2,catchHeight:34,slow:.20}
 ];
 export const clamp=(v,lo,hi)=>Math.min(hi,Math.max(lo,v));
 export function createGame(level=0,upgrades={skill:0,fame:0}) {
