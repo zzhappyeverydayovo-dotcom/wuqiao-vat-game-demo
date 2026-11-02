@@ -1,3 +1,4 @@
+import {loadImageCandidates} from './loader.js';
 import {LEVELS,createGame,step,impulse,clamp,upgradeCost,sanitizeSave} from './engine.js';
 const $=id=>document.getElementById(id);
 const canvas=$('scene'),ctx=canvas.getContext('2d',{alpha:false});
@@ -34,9 +35,32 @@ function updateUI(){const l=LEVELS[state.level];$('level-name').textContent=`第
 function drawImageCover(img,x,y,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale;ctx.drawImage(img,(img.width-sw)/2,(img.height-sh)/2,sw,sh,x,y,w,h);}
 function drawActor(angle){const image=assets.acrobat,x=137,y=464,w=330,h=330;const slices=34;for(let i=0;i<slices;i++){const v=i/slices,v2=(i+1)/slices;const weight=Math.pow(Math.max(0,1-v/.65),2);const shear=angle*.62*weight;const bob=-Math.max(state.tapLeft,state.tapRight)*2.7*weight;ctx.save();ctx.translate(x,y+v*h+bob);ctx.transform(1,shear,0,1,-angle*9*weight,-w*.41*shear);ctx.drawImage(image,0,v*image.height,image.width,(v2-v)*image.height,0,0,w,(v2-v)*h+.45);ctx.restore();}}
 function drawVat(angle){const x=271,y=489-Math.max(state.tapLeft,state.tapRight)*2.7;ctx.save();ctx.translate(x,y);ctx.rotate(angle);const sway=1+Math.sin(spinPhase)*.014;ctx.scale(sway,1);ctx.shadowColor='#14202b38';ctx.shadowBlur=12;ctx.shadowOffsetY=6;ctx.drawImage(assets.vat,14,60,1225,1135,-145,-263,290,269);ctx.shadowColor='transparent';if(state.spin>.3){ctx.lineWidth=1.8;for(let i=0;i<2;i++){const a=spinPhase+i*Math.PI;ctx.strokeStyle=`rgba(255,232,182,${.18+state.spin*.1})`;ctx.beginPath();ctx.ellipse(0,-130,164,25,-.15,a,a+1.5);ctx.stroke();}}ctx.restore();}
-function drawBubbles(dt){for(let i=bubbles.length-1;i>=0;i--){const b=bubbles[i];b.life+=dt;if(b.life>b.duration){bubbles.splice(i,1);continue;}const p=b.life/b.duration;ctx.save();ctx.globalAlpha=Math.min(1,p*8,(1-p)*5);ctx.translate(b.x,b.y-p*32);if(b.type==='money'){ctx.fillStyle='#ffdf8b';ctx.strokeStyle='#674020';ctx.lineWidth=3;ctx.font='bold 22px Georgia,serif';ctx.textAlign='center';ctx.strokeText(b.text,0,0);ctx.fillText(b.text,0,0);}else{ctx.font='bold 19px "Noto Serif SC",serif';const width=ctx.measureText(b.text).width+25;ctx.fillStyle='#fff0ccee';ctx.strokeStyle='#805c36';ctx.lineWidth=1.2;ctx.beginPath();ctx.roundRect(-width/2,-20,width,35,8);ctx.fill();ctx.stroke();ctx.fillStyle='#65452d';ctx.textAlign='center';ctx.fillText(b.text,0,4);}ctx.restore();}}
+function drawBubbles(dt){for(let i=bubbles.length-1;i>=0;i--){const b=bubbles[i];b.life+=dt;if(b.life>b.duration){bubbles.splice(i,1);continue;}const p=b.life/b.duration;ctx.save();ctx.globalAlpha=Math.min(1,p*8,(1-p)*5);ctx.translate(b.x,b.y-p*32);if(b.type==='money'){ctx.fillStyle='#ffdf8b';ctx.strokeStyle='#674020';ctx.lineWidth=3;ctx.font='bold 22px Georgia,serif';ctx.textAlign='center';ctx.strokeText(b.text,0,0);ctx.fillText(b.text,0,0);}else{ctx.font='bold 19px "Noto Serif SC",serif';const width=ctx.measureText(b.text).width+25;ctx.fillStyle='#fff0ccee';ctx.strokeStyle='#805c36';ctx.lineWidth=1.2;ctx.beginPath();roundBox(ctx,-width/2,-20,width,35,8);ctx.fill();ctx.stroke();ctx.fillStyle='#65452d';ctx.textAlign='center';ctx.fillText(b.text,0,4);}ctx.restore();}}
 function drawParticles(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life+=dt;if(p.life<p.delay)continue;const t=(p.life-p.delay)/p.duration;if(t>1){particles.splice(i,1);continue;}const ease=t*t;const x=p.startX+(460-p.startX)*ease;const y=p.startY+(137-p.startY)*ease-Math.sin(t*Math.PI)*100;ctx.save();ctx.translate(x,y);ctx.rotate(t*8+p.rotate);ctx.scale(.6+Math.abs(Math.cos(t*9))*.4,1);ctx.fillStyle='#e3ae45';ctx.strokeStyle='#ffe19b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#826032';ctx.fillRect(-2,-2,4,4);ctx.restore();}}
 function render(dt){ctx.clearRect(0,0,540,960);if(!loaded)return;drawImageCover(assets.background,0,0,540,960);cheerEnergy=Math.max(0,cheerEnergy-dt*.4);if(cheerEnergy>.05){const img=assets.background;for(const [sx,sw,dx,dw,phase] of [[0,.22,0,119,0],[.78,.22,421,119,2]]){const jump=Math.sin(worldTime*15+phase)*cheerEnergy*3;ctx.save();ctx.beginPath();ctx.rect(dx,370,dw,310);ctx.clip();ctx.drawImage(img,sx*img.width,.38*img.height,sw*img.width,.38*img.height,dx,365+jump,dw,365);ctx.restore();}}ctx.save();ctx.fillStyle='#30271c2e';ctx.beginPath();ctx.ellipse(294,778,130,18,0,0,Math.PI*2);ctx.fill();ctx.restore();const angle=screen==='intro'?Math.sin(worldTime*.7)*.035:clamp(state.angle,-.63,.63);drawActor(angle);drawVat(angle);for(let i=0;i<9;i++){const x=(i*131+worldTime*(2+i*.4))%540,y=(i*89+worldTime*7)%800;ctx.fillStyle='#ffeac044';ctx.beginPath();ctx.arc(x,y,1.3,0,6.28);ctx.fill();}drawBubbles(dt);drawParticles(dt);if(screen==='playing'&&state.danger>.5){ctx.fillStyle=`rgba(155,55,30,${Math.sin(worldTime*8)*.025+state.danger*.035})`;ctx.fillRect(0,0,540,960);}}
 function frame(now){const dt=Math.min((now-lastTime)/1000||.016,.04);lastTime=now;const animate=screen!=='paused'&&screen!=='about';if(animate){worldTime+=dt;spinPhase+=dt*(screen==='playing'?state.spin:0.7)*3;}if(screen==='playing'){step(state,dt,inputs);processEvents();}if(animate||screen==='intro')render(animate?dt:0);if(worldTime-lastUi>.065){updateUI();lastUi=worldTime;}if(worldTime>toastUntil)$('toast').classList.remove('show');if(worldTime>stampUntil)$('combo-stamp').classList.remove('show');requestAnimationFrame(frame);}
-async function loadAssets(){const files={background:'courtyard.png',acrobat:'acrobat.png',vat:'vat.png'};let count=0;await Promise.all(Object.entries(files).map(async([key,file])=>{const img=new Image();img.src=`assets/${file}`;await img.decode();assets[key]=img;count++;$('load-status').textContent=`场子已备 ${count} / 3`;}));loaded=true;$('loading').classList.add('hidden');}
-syncSave();updateUI();requestAnimationFrame(frame);loadAssets().catch(e=>{$('loading').innerHTML='<div class="error-note">场景素材未能加载，请检查网络后重试。</div><button class="primary" id="retry-load" style="width:60%">重新加载</button>';$('retry-load').onclick=()=>location.reload();console.error('Asset loading failed',e);});
+function roundBox(context,x,y,w,h,r){
+  if(typeof context.roundRect==='function'){context.roundRect(x,y,w,h,r);return;}
+  context.moveTo(x+r,y);context.lineTo(x+w-r,y);context.quadraticCurveTo(x+w,y,x+w,y+r);
+  context.lineTo(x+w,y+h-r);context.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  context.lineTo(x+r,y+h);context.quadraticCurveTo(x,y+h,x,y+h-r);
+  context.lineTo(x,y+r);context.quadraticCurveTo(x,y,x+r,y);context.closePath();
+}
+function syncLayout(){document.getElementById('game').style.setProperty('--u',document.getElementById('game').getBoundingClientRect().width/100+'px');}
+window.addEventListener('resize',syncLayout);
+async function loadAssets(){
+  const files={background:'courtyard',acrobat:'acrobat',vat:'vat'};
+  const embedded=typeof EMBEDDED_ASSETS!=='undefined'?EMBEDDED_ASSETS:{};
+  let count=0;
+  window.WuqiaoBoot.status('正在准备画面 0 / 3');
+  await Promise.all(Object.entries(files).map(async([key,file])=>{
+    const image=await loadImageCandidates([embedded[key],embedded[key]?null:`assets/mobile/${file}.webp`,`assets/${file}.png`]);
+    assets[key]=image;count++;window.WuqiaoBoot.status(`场子已备 ${count} / 3`);
+  }));
+  loaded=true;
+  render(0);
+  window.WuqiaoBoot.ready();
+}
+window.WuqiaoBoot.status('正在启动游戏 · 手机兼容版 v2');
+syncLayout();syncSave();updateUI();requestAnimationFrame(frame);
+loadAssets().catch(error=>{window.WuqiaoBoot.fail();console.error('Asset loading failed',error);});
