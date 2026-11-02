@@ -6,6 +6,7 @@ const canvas=$('scene'),ctx=canvas.getContext('2d',{alpha:false});
 let save;try{save=sanitizeSave(JSON.parse(localStorage.getItem('wuqiao-vat-v1')||'{}'));}catch{save=sanitizeSave({});}
 let state=createGame(0,save),selectedLevel=0,screen='intro',lastTime=0,worldTime=0,toastUntil=0,stampUntil=0,cheerEnergy=0,settled=false;
 let assets={},loaded=false,particles=[],bubbles=[],lastUi=0,spinPhase=0,audioCtx,master,seed=34,lastCatchAt=-10;
+const learnedStages=new Set();
 const inputs={left:false,right:false},pressed={left:new Set(),right:new Set()};
 const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
 const persist=()=>{try{localStorage.setItem('wuqiao-vat-v1',JSON.stringify(save));}catch{}};
@@ -15,8 +16,21 @@ function tone(freq,duration=.15,type='sine',volume=.2,delay=0){if(!save.sound||!
 function clap(count=3){if(!save.sound||!audioCtx)return;for(let i=0;i<count;i++){const duration=.075;const b=audioCtx.createBuffer(1,audioCtx.sampleRate*duration,audioCtx.sampleRate),d=b.getChannelData(0);for(let j=0;j<d.length;j++)d[j]=(random()*2-1)*Math.exp(-j/d.length*8);const source=audioCtx.createBufferSource(),g=audioCtx.createGain(),filter=audioCtx.createBiquadFilter();filter.type='highpass';filter.frequency.value=1000;g.gain.value=.15;source.buffer=b;source.connect(filter);filter.connect(g);g.connect(master);source.start(audioCtx.currentTime+i*.13);source.onended=()=>{source.disconnect();filter.disconnect();g.disconnect();};}}
 function showToast(text,duration=2){$('toast').textContent=text;$('toast').classList.add('show');toastUntil=worldTime+duration;}
 function releaseAll(){for(const side of ['left','right']){pressed[side].clear();inputs[side]=false;$(side).classList.remove('pressed');}}
-function startRound(level=selectedLevel){selectedLevel=clamp(level,0,save.unlocked-1);state=createGame(selectedLevel,save);screen='playing';settled=false;particles=[];bubbles=[];cheerEnergy=0;releaseAll();$('overlay').classList.add('hidden');$('combo-stamp').classList.remove('show');$('pause').textContent='Ⅱ';$('pause').setAttribute('aria-label','暂停游戏');initAudio();tone(180,.5,'sine',.45);showToast('锣声一响，好戏开场',2);updateUI();}
-function pauseGame(){if(screen!=='playing')return;state.wasBoth=false;screen='paused';releaseAll();$('pause').textContent='▷';$('pause').setAttribute('aria-label','继续游戏');$('panel').innerHTML=`<span class="eyebrow">歇口气，好戏还在</span><h2>稍歇片刻</h2><p class="result-reason">赏钱与当前进度都替你留着。</p><button class="primary" id="resume">继续表演 <span>↗</span></button><button class="secondary" id="restart">重新开场</button>`;$('overlay').classList.remove('hidden');$('resume').onclick=resumeGame;$('restart').onclick=()=>startRound();}
+function startRound(level=selectedLevel){
+  selectedLevel=clamp(level,0,save.unlocked-1);state=createGame(selectedLevel,save);settled=false;particles=[];bubbles=[];cheerEnergy=0;releaseAll();
+  $('combo-stamp').classList.remove('show');$('pause').textContent='Ⅱ';$('pause').setAttribute('aria-label','暂停游戏');
+  const begin=()=>{learnedStages.add(selectedLevel);screen='playing';$('overlay').classList.add('hidden');initAudio();tone(180,.5,'sine',.45);showToast('锣声一响，好戏开场',1.3);updateUI();};
+  if(learnedStages.has(selectedLevel)){begin();return;}
+  screen='brief';const l=LEVELS[selectedLevel];
+  const lessons=[
+    ['双脚一起接，练准节奏','脚力满后，双键起缸。','松开双键，等金色脚圈亮起，再同时按下。','完成三连蹬；抢拍两次会断连。'],
+    ['先扶平，才蹬得高','缸底会向左或右倾：低侧脚圈提前指示。','落回时先按低侧单脚，继续按住把缸扶正。','平衡指针进绿区，再双键合力蹬；左右交替变化。'],
+    ['错开两脚，分两拍卸力','落回时先用低侧脚接住，不能同时按。','等另一只脚圈亮起，再补另一脚；太早或太晚都会断连。','两脚接稳后松开，再双键蹬起；连续完成五次。']
+  ][selectedLevel];
+  $('panel').innerHTML=`<span class="eyebrow">第 ${selectedLevel+1} 场 · 新功夫</span><h2>${l.name}</h2><p class="intro-copy">${lessons[0]}</p><div class="how-to stage-steps">${lessons.slice(1).map((text,i)=>`<span><b>${i+1}</b>${text}</span>`).join('')}</div><p class="result-reason">${selectedLevel?'这一关只同时按 A、D 无法过关。':'先练准，再练难。'}</p><button class="primary" id="begin-stage">开始 · ${l.lesson}<span>↗</span></button>`;
+  $('overlay').classList.remove('hidden');$('begin-stage').onclick=begin;updateUI();
+}
+function pauseGame(){if(screen!=='playing')return;state.wasBoth=false;state.wasLeft=false;state.wasRight=false;screen='paused';releaseAll();$('pause').textContent='▷';$('pause').setAttribute('aria-label','继续游戏');$('panel').innerHTML=`<span class="eyebrow">歇口气，好戏还在</span><h2>稍歇片刻</h2><p class="result-reason">赏钱与当前进度都替你留着。</p><button class="primary" id="resume">继续表演 <span>↗</span></button><button class="secondary" id="restart">重新开场</button>`;$('overlay').classList.remove('hidden');$('resume').onclick=resumeGame;$('restart').onclick=()=>startRound();}
 function resumeGame(){if(screen!=='paused')return;screen='playing';$('pause').textContent='Ⅱ';$('pause').setAttribute('aria-label','暂停游戏');$('overlay').classList.add('hidden');releaseAll();}
 function buyUpgrade(kind){const cost=upgradeCost(kind,save[kind]);if(save[kind]>=3||save.coins<cost)return;save.coins-=cost;save[kind]++;persist();syncSave();tone(780,.2);tone(1040,.3,'sine',.15,.1);renderResults();}
 function shopRow(kind,title,copy){const rank=save[kind],cost=upgradeCost(kind,rank);return `<div class="shop-row"><div><b>${title} <span style="opacity:.45">${rank}/3</span></b><small>${copy}</small></div><button class="buy" data-upgrade="${kind}" ${rank>=3||save.coins<cost?'disabled':''}>${rank>=3?'已练满':`${cost} 文 · 提升`}</button></div>`;}
@@ -43,7 +57,9 @@ function processEvents(){for(const event of state.events){
     tone(420+event.count*100,.3,'sine',.18,.08);
     bubbles.push({text:event.final?'看这最后一蹬！':event.count>1?'再高一点！':'起！',x:event.count%2?77:458,y:430,life:0,duration:1.3,type:'cheer'});
   }
-  else if(event.type==='early')showToast('先松开 · 等缸落回再接蹬',.8);
+  else if(event.type==='mistake'){showToast(event.message,1.2);tone(100,.15,'triangle',.18);}
+  else if(event.type==='firstfoot'){state.tapLeft=event.foot===-1?1:0;state.tapRight=event.foot===1?1:0;tone(180,.12,'triangle',.2);}
+  else if(event.type==='secondfoot'){state.tapLeft=state.tapRight=1;tone(250,.12,'triangle',.2);}
   else if(event.type==='brace'){tone(170,.12,'triangle',.2);}
   else if(event.type==='catch'){
     lastCatchAt=worldTime;cheer(event.final?5:Math.min(3,event.count+1));
@@ -66,7 +82,7 @@ function updateUI(){
   $('streak-label').textContent=`脚力 ${Math.floor(state.power)}%`;
   $('multiplier').textContent=`赏钱 ×${state.tier}`;
   $('crowd-text').textContent=state.tier>=5?'全场喝彩，赏钱不断':state.tier>=2?'有人拍手叫好了':'稳住积脚力，连稳得赏钱';
-  const zone=document.querySelector('.safe-zone'),width=(.16+state.upgrades.skill*.018)/.58*94;
+  const zone=document.querySelector('.safe-zone'),width=(state.phase==='support'?.055:.16+state.upgrades.skill*.018)/.58*94;
   zone.style.width=`${width}%`;zone.style.left=`${50-width/2}%`;$('needle').style.left=`${50+clamp(state.angle/.58,-1,1)*47}%`;
   let hint=state.spin<.35?'轻点左右脚，让大缸继续转动':Math.abs(state.angle)>.2?(state.angle>0?'大缸向右倾 → 右脚发力':'左脚发力 ← 大缸向左倾'):'缸向哪边倒，就按哪边扶稳';
   let act=`稳住大缸 · 准备连蹬 ${l.target} 次`,label='稳住重心',buttonLeft='左脚发力',buttonRight='右脚发力';
@@ -78,14 +94,40 @@ function updateUI(){
     act=landing?(final?'收！最后一记，双脚接稳':'接 · 蹬！双键一起按'):`第 ${state.kicks} 蹬 / ${l.target} 蹬${final?' · 压轴一记':state.kicks>1?' · 更高了！':' · 起！'}`;
     buttonLeft=buttonRight=landing?(final?'接稳收势':'接住再蹬'):'等待落缸';
   }
+  if(flight&&state.level>0){
+    const foot=state.firstFoot===1?'右':'左';
+    act=landing?`先用${foot}脚 · 接低侧`:`第 ${state.kicks} 蹬 · 缸向${foot}倾`;
+    hint=landing?`${foot}脚单独按下接缸 · 这一拍不要双脚同按`:`预判：先${foot}脚${state.level===2?'，再等另一脚接上':'接住，再单脚扶平'}`;
+    buttonLeft=state.firstFoot===-1?'左脚先接':'等右脚先接';buttonRight=state.firstFoot===1?'右脚先接':'等左脚先接';
+  }
+  if(state.phase==='support'){
+    const flat=Math.abs(state.angle)<=.055,foot=state.angle>0?'右':'左';
+    label=flat?'缸已扶平 · 双脚蹬':'单脚扶正 · 指针对准绿区';
+    $('streak-label').textContent=`托缸 ${Math.max(0,state.supportLimit-state.phaseTime).toFixed(1)}秒`;
+    act=flat?(final?'双脚合力 · 接稳收势':'扶平了 · 双脚合力蹬！'):`按住${foot}脚 · 把缸扶平`;
+    hint=flat?'松开后双键一起按 · 合力蹬起':`按住${foot}键微调 · 绿区内补另一脚蹬起`;
+    buttonLeft=flat?'合力蹬起':state.angle<0?'左脚扶正':'等缸扶平';buttonRight=flat?'合力蹬起':state.angle>0?'右脚扶正':'等缸扶平';
+    $('crowd-text').textContent='缸底扶平才能继续';$('multiplier').textContent='低侧脚发力';
+  }
+  if(state.phase==='splitcatch'){
+    const other=state.firstFoot===1?'左':'右',now=state.phaseTime>=.18;
+    label=now?`现在补${other}脚`:`先等一拍 · 准备${other}脚`;
+    $('streak-label').textContent='分脚卸力';zone.style.left='25.7%';zone.style.width='54.3%';$('needle').style.left=`${Math.min(100,state.phaseTime/.7*100)}%`;
+    act=now?`${other}脚接上！`:`第一脚已接 · 等${other}脚圈亮`;
+    hint=now?`单独补按${other}键 · 两脚接稳后再合力蹬`:'另一脚先别按 · 等脚圈亮起';
+    buttonLeft=other==='左'?(now?'左脚接上':'左脚等一拍'):'已接住';buttonRight=other==='右'?(now?'右脚接上':'右脚等一拍'):'已接住';
+    $('crowd-text').textContent='第一脚卸力 → 第二脚接稳';$('multiplier').textContent='不能同时硬接';
+  }
   if(state.mode==='won'){act=`${l.target} 连蹬 · 最后一记接稳！`;hint='这一场，满堂彩';}
   $('balance-label').textContent=label;$('balance-label').style.color=ready?'#a1432b':'';
   $('hint').textContent=hint;$('act-label').textContent=act;
   $('game').dataset.phase=state.mode==='playing'?state.phase:state.mode;
-  $('game').classList.toggle('chain-active',chain);$('game').classList.toggle('catch-now',landing&&state.mode==='playing');
+  $('game').classList.toggle('chain-active',chain);$('game').classList.toggle('catch-now',(landing||state.phase==='splitcatch'&&state.phaseTime>=.18||state.phase==='support'&&Math.abs(state.angle)<=.055)&&state.mode==='playing');
+  $('game').dataset.lesson=String(state.level);
+  $('game').dataset.foot=state.phase==='splitcatch'?(state.firstFoot===1?'left':'right'):state.firstFoot===1?'right':'left';
   $('left-text').textContent=buttonLeft;$('right-text').textContent=buttonRight;
-  $('left').setAttribute('aria-label',chain?'左脚，与右脚同时按下接蹬':'左脚发力，向右扶正');
-  $('right').setAttribute('aria-label',chain?'右脚，与左脚同时按下接蹬':'右脚发力，向左扶正');
+  $('left').setAttribute('aria-label',chain?`左脚：${buttonLeft}`:'左脚发力，向右扶正');
+  $('right').setAttribute('aria-label',chain?`右脚：${buttonRight}`:'右脚发力，向左扶正');
   $('left-cue').style.opacity=chain?0:state.tapLeft*.8;$('right-cue').style.opacity=chain?0:state.tapRight*.8;
 }
 function drawImageCover(img,x,y,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale;ctx.drawImage(img,(img.width-sw)/2,(img.height-sh)/2,sw,sh,x,y,w,h);}
@@ -93,11 +135,12 @@ function legBend(){
   const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
   if(state.phase==='windup'){const t=state.phaseTime/.46;return t<.72?150*smooth(t/.72):150-165*smooth((t-.72)/.28);}
   if(state.phase==='rebound'){const t=state.phaseTime/.56;return t<.42?145*smooth(t/.42):t<.65?145:145-160*smooth((t-.65)/.35);}
+  if(state.phase==='support'||state.phase==='splitcatch')return 28;
   if(state.phase==='flight')return -15*Math.max(0,1-state.phaseTime/.18);
   if(state.phase==='celebrate')return 100*Math.sin(Math.min(1,(worldTime-lastCatchAt)/.7)*Math.PI);
   return -Math.max(state.tapLeft,state.tapRight)*8;
 }
-function drawActor(angle){drawLegRig(ctx,assets.acrobat,137,464,330,legBend(),0);}
+function drawActor(angle){drawLegRig(ctx,assets.acrobat,137,464,330,legBend(),state.phase==='support'||state.phase==='splitcatch'?state.angle*2.4:0);}
 function drawVat(angle){
   const airborne=state.phase==='flight',bend=airborne?0:legBend()*330/1254;
   const x=271,y=489-state.height*.44+bend;
@@ -113,13 +156,20 @@ function drawVat(angle){
   ctx.restore();
 }
 function drawFlightGuide(){
-  if(state.phase!=='flight')return;
-  const l=LEVELS[state.level],landing=state.vy<0&&state.height<=l.catchHeight;
-  if(!landing)return;
-  ctx.save();ctx.strokeStyle='#ffe29a';ctx.fillStyle='#fbc75c33';ctx.lineWidth=4;
-  ctx.beginPath();ctx.ellipse(271,492,90,19,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.font='bold 27px serif';ctx.fillStyle='#fff0b4';ctx.strokeStyle='#624020';ctx.lineWidth=4;ctx.textAlign='center';
-  const text=state.kicks===l.target?'双脚 · 收！':'双脚 · 接蹬！';ctx.strokeText(text,271,548);ctx.fillText(text,271,548);ctx.restore();
+  if(!['flight','support','splitcatch'].includes(state.phase))return;
+  const l=LEVELS[state.level],landing=state.phase==='flight'&&state.vy<0&&state.height<=l.catchHeight;
+  const support=state.phase==='support',split=state.phase==='splitcatch',flat=Math.abs(state.angle)<=.055;
+  ctx.save();
+  for(const [foot,x] of [[-1,239],[1,313]]){
+    let active=landing&&(state.level===0||foot===state.firstFoot);
+    if(support)active=flat||foot===(state.angle>0?1:-1);
+    if(split)active=foot!==state.firstFoot&&state.phaseTime>=.18;
+    const expected=state.level>0&&(split?foot!==state.firstFoot:foot===state.firstFoot);
+    ctx.strokeStyle=active?'#ffe29a':expected?'#fff0c4aa':'#fff0c433';ctx.fillStyle=active?'#ffd56b55':'#fff0c40b';ctx.lineWidth=active?4:1.5;
+    ctx.beginPath();ctx.ellipse(x,501,29,12,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    if(active){ctx.font='bold 21px serif';ctx.fillStyle='#fff0b4';ctx.strokeStyle='#624020';ctx.lineWidth=3;ctx.textAlign='center';ctx.strokeText(foot===-1?'左 A':'右 D',x,535);ctx.fillText(foot===-1?'左 A':'右 D',x,535);}
+  }
+  ctx.restore();
 }
 function drawBubbles(dt){for(let i=bubbles.length-1;i>=0;i--){const b=bubbles[i];b.life+=dt;if(b.life>b.duration){bubbles.splice(i,1);continue;}const p=b.life/b.duration;ctx.save();ctx.globalAlpha=Math.min(1,p*8,(1-p)*5);ctx.translate(b.x,b.y-p*32);if(b.type==='money'){ctx.fillStyle='#ffdf8b';ctx.strokeStyle='#674020';ctx.lineWidth=3;ctx.font='bold 22px Georgia,serif';ctx.textAlign='center';ctx.strokeText(b.text,0,0);ctx.fillText(b.text,0,0);}else{ctx.font='bold 19px "Noto Serif SC",serif';const width=ctx.measureText(b.text).width+25;ctx.fillStyle='#fff0ccee';ctx.strokeStyle='#805c36';ctx.lineWidth=1.2;ctx.beginPath();roundBox(ctx,-width/2,-20,width,35,8);ctx.fill();ctx.stroke();ctx.fillStyle='#65452d';ctx.textAlign='center';ctx.fillText(b.text,0,4);}ctx.restore();}}
 function drawParticles(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life+=dt;if(p.life<p.delay)continue;const t=(p.life-p.delay)/p.duration;if(t>1){particles.splice(i,1);continue;}const ease=t*t;const x=p.startX+(460-p.startX)*ease;const y=p.startY+(137-p.startY)*ease-Math.sin(t*Math.PI)*100;ctx.save();ctx.translate(x,y);ctx.rotate(t*8+p.rotate);ctx.scale(.6+Math.abs(Math.cos(t*9))*.4,1);ctx.fillStyle='#e3ae45';ctx.strokeStyle='#ffe19b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#826032';ctx.fillRect(-2,-2,4,4);ctx.restore();}}
@@ -163,6 +213,6 @@ async function loadAssets(){
   render(0);
   window.WuqiaoBoot.ready();
 }
-window.WuqiaoBoot.status('正在启动游戏 · 连环蹬缸版 v4');
+window.WuqiaoBoot.status('正在启动游戏 · 三阶功夫版 v5');
 syncLayout();syncSave();updateUI();requestAnimationFrame(frame);
 loadAssets().catch(error=>{window.WuqiaoBoot.fail();console.error('Asset loading failed',error);});
