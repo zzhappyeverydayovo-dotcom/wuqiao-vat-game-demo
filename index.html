@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#243b44"><meta name="description" content="以吴桥蹬大缸为灵感的双指平衡游戏。稳住大缸，赢得满堂彩。">
+  <title>脚下有乾坤 · 吴桥蹬大缸</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='20' fill='%23243b44'/%3E%3Ctext x='40' y='55' text-anchor='middle' font-size='48' fill='%23edc584'%3E技%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="desktop-note"><span class="note-rule"></span><span class="vertical-label">一方小院 · 一身绝活</span><p>WUQIAO<br>ACROBATICS</p></aside>
+<main class="game" id="game" aria-label="脚下有乾坤，双脚蹬缸平衡游戏">
+  <canvas id="scene" width="540" height="960" aria-label="艺人用双脚托起大缸；使用下方左右发力按钮维持平衡"></canvas>
+  <div class="vignette"></div>
+  <header class="header">
+    <div class="topline"><span class="edition">吴桥杂技 · 蹬大缸</span><div class="header-actions"><button id="sound" class="icon-button" aria-label="关闭音效" title="音效">♪</button><button id="pause" class="icon-button" aria-label="暂停游戏" title="暂停">Ⅱ</button></div></div>
+    <h1>脚下有乾坤<span class="seal">绝活</span></h1>
+    <div class="hud"><span id="level-name">第一场 · 杂技小院</span><span class="timer" id="timer">00:45</span><span class="purse"><i class="coin-icon"></i><b id="coins">0</b></span></div>
+  </header>
+  <section class="balance-area" aria-label="平衡与喝彩状态">
+    <div class="balance-label"><span id="balance-label">稳住重心</span><span id="streak-label">静待开场</span></div>
+    <div class="balance-track"><span class="safe-zone"></span><span class="balance-center"></span><span id="needle" class="needle"></span></div>
+    <div class="crowd-state"><span id="crowd-text">小院里，等你露一手</span><strong id="multiplier">赏钱 ×1</strong></div>
+  </section>
+  <div id="toast" class="toast" role="status"></div>
+  <div class="combo-stamp" id="combo-stamp"><span>满堂彩</span><b>×3</b></div>
+  <div class="foot-cue left-cue" id="left-cue">左脚 ↑</div><div class="foot-cue right-cue" id="right-cue">右脚 ↑</div>
+  <footer class="controls">
+    <div class="progress-caption"><span id="objective">稳转目标</span><b><em id="stable-seconds">0.0</em><span id="target-seconds"> / 15 秒</span></b></div>
+    <div class="progress-track"><span id="progress"></span></div>
+    <div id="hint" class="control-hint">缸往哪边倒，就按哪边扶稳</div>
+    <div class="pads"><button id="left" class="pad" aria-label="左脚发力，向右扶正"><span class="pad-icon">↗</span><span>左脚发力<small>A / ←</small></span></button><button id="right" class="pad" aria-label="右脚发力，向左扶正"><span>右脚发力<small>D / →</small></span><span class="pad-icon">↖</span></button></div>
+    <div class="bottom-caption"><span>稳住有赏 · 好戏连场</span><button id="about" aria-label="了解吴桥蹬大缸">绝活小记 ↗</button></div>
+  </footer>
+  <section class="overlay" id="overlay" aria-label="游戏菜单">
+    <div class="panel intro" id="panel">
+      <span class="eyebrow">锣声一响，好戏开场</span><h2>一口大缸<br>凭脚上功夫</h2>
+      <p class="intro-copy">左右双脚稳住大缸。稳得越久，<br>喝彩越响，赏钱越多。</p>
+      <div class="reward-ladder"><span><b>3 秒</b>有人叫好</span><span><b>7 秒</b>掌声四起</span><span><b>12 秒</b>赏钱 ×5</span></div>
+      <div class="how-to"><span>① 缸向左倾 → 左脚发力</span><span>② 缸向右倾 → 右脚发力</span><span>③ 轻点交替续转，按住持续扶正</span></div>
+      <button class="primary" id="start">上场，露一手 <span>↗</span></button>
+      <p class="panel-foot">双拇指操作 · 电脑也可用 A / D 或方向键</p>
+    </div>
+  </section>
+  <div class="loading" id="loading"><span class="loading-mark">技</span><b>好戏，正在准备</b><span id="load-status">搬大缸 · 摆场子</span><div class="load-line"><i></i></div></div>
+</main>
+<aside class="desktop-instructions"><span class="small-seal">手上<br>有戏</span><h3>稳住。<br>满堂喝彩。</h3><p>左右轻点，续上转劲。<br>缸向哪边倾，就往哪边扶。</p><div class="key-row"><kbd>A</kbd><kbd>D</kbd><span>或 ← →</span></div><p class="tiny">连赏铜钱可提升基本功与人气<br>进度自动保存在当前浏览器</p></aside>
+<script type="module" src="game.js"></script>
+</body></html>
