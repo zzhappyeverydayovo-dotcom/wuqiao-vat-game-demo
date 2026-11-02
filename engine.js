@@ -1,14 +1,14 @@
 export const LEVELS = [
-  { name:'初登场', venue:'杂技小院', target:1, height:110, duration:70, wind:1.35, rate:1, chargeWidth:.25, catchHeight:48, tolerance:32, drift:9 },
-  { name:'满堂彩', venue:'运河集市', target:1, height:165, duration:85, wind:2.1, rate:1.5, chargeWidth:.19, catchHeight:37, tolerance:25, drift:25 },
-  { name:'压轴绝活', venue:'吴桥大会', target:2, height:195, duration:100, wind:2.9, rate:2, chargeWidth:.15, catchHeight:30, tolerance:21, drift:31 }
+  {name:'初登场',venue:'杂技小院',target:3,heights:[65,110,155],duration:70,wind:1.35,rate:1,catchHeight:54,slow:.36},
+  {name:'满堂彩',venue:'运河集市',target:4,heights:[80,125,170,215],duration:85,wind:2.1,rate:1.5,catchHeight:43,slow:.27},
+  {name:'压轴绝活',venue:'吴桥大会',target:5,heights:[95,140,185,230,275],duration:100,wind:2.9,rate:2,catchHeight:34,slow:.20}
 ];
 export const clamp=(v,lo,hi)=>Math.min(hi,Math.max(lo,v));
 export function createGame(level=0,upgrades={skill:0,fame:0}) {
   return {level,upgrades:{skill:0,fame:0,...upgrades},mode:'playing',phase:'balance',elapsed:0,angle:.035,velocity:0,
     spin:1,stable:0,streak:0,bestStreak:0,tier:1,tips:0,rewardClock:0,danger:0,left:0,right:0,tapLeft:0,tapRight:0,
     lastFoot:0,lastTap:-5,grace:1.2,cheers:0,nextMilestone:3,events:[],power:0,charge:0,perfect:false,
-    height:0,vy:0,vatX:0,catchX:0,vx:0,peak:0,requiredHeight:0,catches:0,phaseTime:0,
+    height:0,vy:0,vatX:0,catchX:0,vx:0,peak:0,requiredHeight:0,catches:0,kicks:0,phaseTime:0,
     wasBoth:false,catchArmed:0,landingReady:false,catchFlash:0,reason:''};
 }
 export function impulse(s,foot) {
@@ -23,14 +23,10 @@ export function impulse(s,foot) {
 function end(s,won,reason='') {s.mode=won?'won':'lost';s.reason=reason;s.events.push({type:'end',won});}
 function reward(s,value,tier=5) {s.tips+=value;s.events.push({type:'tip',value,tier});}
 function launch(s,l) {
-  s.requiredHeight=l.height+s.catches*35;
-  const low=.74-l.chargeWidth/2,high=.74+l.chargeWidth/2;
-  s.perfect=s.charge>=low&&s.charge<=high;
-  const altitude=s.requiredHeight*(s.perfect?1.16:.48+s.charge*.85);
-  s.vy=Math.sqrt(2*185*altitude);s.height=0;s.peak=0;
-  s.vatX=s.catchX;s.vx=(s.catches%2===0?1:-1)*l.drift;
-  s.phase='flight';s.phaseTime=0;s.power=0;s.catchArmed=0;s.landingReady=false;
-  s.events.push({type:'launch',perfect:s.perfect});
+  s.requiredHeight=l.heights[s.catches];
+  s.vy=Math.sqrt(2*215*s.requiredHeight);s.height=0;s.peak=0;s.vatX=0;s.vx=0;
+  s.kicks++;s.phase='flight';s.phaseTime=0;s.power=0;s.catchArmed=0;s.landingReady=false;
+  s.events.push({type:'launch',count:s.kicks,final:s.kicks===l.target});
 }
 export function step(s,dt,input={left:false,right:false}) {
   if(s.mode!=='playing')return s;
@@ -39,44 +35,41 @@ export function step(s,dt,input={left:false,right:false}) {
   s.tapLeft=Math.max(0,s.tapLeft-dt*4);s.tapRight=Math.max(0,s.tapRight-dt*4);
   s.left+=((input.left?1:0)-s.left)*Math.min(1,dt*14);s.right+=((input.right?1:0)-s.right)*Math.min(1,dt*14);
   if(s.elapsed>=l.duration){end(s,false,'锣声收场了，还没有完成蹬接。下次脚力蓄满就试着起缸。');return s;}
-  if(s.phase==='charge') {
-    if(!both){launch(s,l);return s;}
-    s.charge+=dt*.58;s.angle*=Math.exp(-dt*5);s.velocity=0;
-    if(s.charge>1.08){s.phase='balance';s.charge=0;s.power=75;s.events.push({type:'overcharge'});}
+  if(s.phase==='windup'||s.phase==='rebound') {
+    s.angle*=Math.exp(-dt*8);s.velocity=0;
+    if(s.phaseTime>=(s.phase==='windup'?.46:.56))launch(s,l);
     return s;
   }
   if(s.phase==='flight') {
-    if(!both)s.landingReady=true;
+    // Every return must be a fresh two-finger press, never a held auto-combo.
+    if(!input.left&&!input.right)s.landingReady=true;
     s.catchArmed=Math.max(0,s.catchArmed-dt);
-    const move=(input.right?1:0)-(input.left?1:0);
-    s.catchX=clamp(s.catchX+move*100*dt,-92,92);
-    const flightDt=dt*(s.vy<0&&s.height<=l.catchHeight?[.35,.24,.17][s.level]:1);
-    s.vatX+=s.vx*flightDt;s.vy-=185*flightDt;s.height+=s.vy*flightDt;s.peak=Math.max(s.peak,s.height);
-    s.angle+=((s.vx*.0012)-s.angle*.8)*dt;
+    const flightDt=dt*(s.vy<0&&s.height<=l.catchHeight?l.slow:1);
+    s.vy-=215*flightDt;s.height+=s.vy*flightDt;s.peak=Math.max(s.peak,s.height);
+    s.angle=Math.sin(s.phaseTime*3)*.035;
     if(bothDown&&s.landingReady){
-      if(s.vy<0&&s.height<=l.catchHeight){s.catchArmed=.75;s.events.push({type:'brace'});}
-      else s.events.push({type:'early'});
+      if(s.vy<0&&s.height<=l.catchHeight){
+        s.catchArmed=.8;s.perfect=s.height<l.catchHeight*.62;
+        s.events.push({type:'brace',final:s.kicks===l.target});
+      }else s.events.push({type:'early'});
     }
-    if(s.vy<0&&s.height<=12){
-      if(s.catchArmed<=0){s.height=0;end(s,false,'接缸慢了一拍：下落进入金色接缸区时，双键同时短按。');}
-      else if(Math.abs(s.vatX-s.catchX)>l.tolerance){s.height=0;end(s,false,'落点没有对齐：腾空时按左或右移动双脚，再双键接缸。');}
-      else if(s.peak<s.requiredHeight){s.height=0;end(s,false,'接住了，但蹬得不够高。下次蓄力到金色区再松手。');}
+    if(s.vy<0&&s.height<=4){
+      s.height=0;
+      if(s.catchArmed<=0){end(s,false,`第 ${s.kicks} 蹬没接上。每次先松开双键，等缸落回、金圈亮起，再双键一起接蹬。赏钱保留。`);}
       else {
-        s.height=0;s.vatX=s.catchX;s.angle=0;s.velocity=0;s.spin=1.4;s.catches++;s.catchFlash=1;
-        reward(s,Math.round((s.perfect?50:30)*(s.level+1)*(1+s.upgrades.fame*.3)));
-        s.events.push({type:'catch',perfect:s.perfect,count:s.catches});
-        if(s.catches>=l.target){s.phase='celebrate';end(s,true);}
-        else {s.phase='recover';s.phaseTime=0;}
+        s.angle=0;s.velocity=0;s.spin=1.4;s.catches++;s.catchFlash=1;
+        const final=s.catches>=l.target;
+        reward(s,Math.round((final?50:8*s.catches)*(s.level+1)*(s.perfect?1.5:1)*(1+s.upgrades.fame*.3)),final?5:s.catches);
+        s.events.push({type:'catch',perfect:s.perfect,count:s.catches,final});
+        if(final){s.phase='celebrate';s.phaseTime=0;end(s,true);}
+        else {s.phase='rebound';s.phaseTime=0;}
       }
     }
     return s;
   }
-  if(s.phase==='recover') {
-    s.catchX*=Math.exp(-dt*2);s.vatX=s.catchX;
-    if(s.phaseTime>1.3){s.phase='balance';s.phaseTime=0;s.power=65;s.charge=0;s.grace=1.2;s.events.push({type:'nextkick'});}
-    return s;
+  if(s.power>=100&&bothDown){
+    s.phase='windup';s.phaseTime=0;s.danger=0;s.events.push({type:'charge'});return s;
   }
-  if(s.power>=100&&bothDown){s.phase='charge';s.phaseTime=0;s.charge=0;s.events.push({type:'charge'});return s;}
   const t=s.elapsed,disturbance=(Math.sin(t*1.37)+.52*Math.sin(t*2.41+1.7))*l.wind*.075;
   s.velocity+=(Math.sin(s.angle)*.72+disturbance+(s.left-s.right)*.92-s.velocity*1.7)*dt;
   s.angle+=s.velocity*dt;s.spin=clamp(s.spin-dt*.095+dt*(s.left+s.right)*.035,0,2.1);
