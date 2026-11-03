@@ -1,3 +1,4 @@
+import {performancePose,SOURCE_SCALE} from './motion.js';
 import {THEMES,LESSON_LENGTH,lessonFrame,createPracticeState} from './tutorial.js';
 import {drawLegRig} from './rig.js';
 import {loadImageCandidates} from './loader.js';
@@ -28,14 +29,15 @@ function tickTutorial(dt){
     if(f.done){tutorial.watched=true;$('lesson-go').disabled=false;$('lesson-go').textContent='跟着练一次';}
     showLesson(f.title,f.copy,f.index,f.keys);
   }else if(screen==='practice'){
-    if(!tutorial.paused&&!tutorial.result){let remaining=dt*.55;while(remaining>0){const tick=Math.min(remaining,1/60);step(state,tick,inputs);state.events.length=0;remaining-=tick;if(state.catches||state.mode==='lost')break;}
-      if(state.catches){tutorial.result='success';releaseAll();$('lesson-go').disabled=false;$('lesson-go').textContent=tutorial.level<save.unlocked?'正式开场 ↗':'回到小院 · 闯关解锁';}
+    if(!tutorial.paused&&!tutorial.result){let remaining=dt*.55;while(remaining>0){const tick=Math.min(remaining,1/60);step(state,tick,inputs);state.events.length=0;remaining-=tick;if(state.mode==='lost')break;}
+      if(state.catches&&state.phase==='flight'){tutorial.result='success';releaseAll();$('lesson-go').disabled=false;$('lesson-go').textContent=tutorial.level<save.unlocked?'正式开场 ↗':'回到小院 · 闯关解锁';}
       else if(state.mode==='lost'){tutorial.result='retry';releaseAll();$('lesson-go').disabled=false;$('lesson-go').textContent='再练一次';}
     }
     let title,copy,index;
     if(tutorial.result==='success'){title='练会了！这一蹬接得漂亮';copy='正式场左右交替、连续蹬得更高。准备好就开场。';index=4;}
     else if(tutorial.result==='retry'){title='没关系，再来一次';copy=stageText(state.reason);index=0;}
-    else if(state.phase==='flight'){const ready=state.height<=LEVELS[state.level].catchHeight;title=ready?'现在单独按 D，右脚先接':'先等右侧金圈亮';copy='不要同时按 A、D；先接向下倾斜的一侧。';index=ready?1:0;}
+    else if(state.phase==='flight'&&!state.catches){const ready=state.height<=LEVELS[state.level].catchHeight;title=state.firstArmed?'已准备接住 · 等器物落到脚底':ready?'现在单独按 D，右脚先接':'先等右侧金圈亮';copy='不要同时按 A、D；先接向下倾斜的一侧。';index=ready?1:0;}
+    else if(state.phase==='rebound'||(state.phase==='flight'&&state.catches)){title=performancePose(state).label;copy='看：屈腿接住重量，再伸腿把器物蹬离脚底。';index=4;}
     else if(state.phase==='splitcatch'){const ready=state.phaseTime>=.18;title=ready?'现在单独按 A，左脚接上':'松开 D，等左侧金圈亮';copy=ready?'补上另一脚，完成分拍卸力。':'先别按 A，两只脚需要错开时间接。';index=2;}
     else {const flat=Math.abs(state.angle)<=.055;title=flat?'扶平了：先松开，再同时按 A + D':'按住 D，让指针进入绿区';copy=flat?'双脚合力蹬起，完成这一组动作。':'右脚继续托起低侧；指针进绿区就松手。';index=flat?4:2;}
     showLesson(title,copy,index,inputs);
@@ -135,8 +137,8 @@ function updateUI(){
   let hint=state.spin<.35?'轻点左右脚，让大缸继续转动':Math.abs(state.angle)>.2?(state.angle>0?'大缸向右倾 → 右脚发力':'左脚发力 ← 大缸向左倾'):'缸向哪边倒，就按哪边扶稳';
   let act=`稳住大缸 · 准备连蹬 ${l.target} 次`,label='稳住重心',buttonLeft='左脚发力',buttonRight='右脚发力';
   if(ready){label='连环蹬缸就绪';hint='双键同时按一下 · 开始连续蹬缸';act='脚力已满 · 双脚起缸';}
-  if(state.phase==='windup'){hint='松开双键 · 看脚下发力';act='收腿蓄势 → 第一蹬';buttonLeft=buttonRight='松开双键';}
-  if(state.phase==='rebound'){hint='接住顺势收腿 · 马上再蹬高一层';act=`${state.catches} 连蹬！下一蹬更高`;buttonLeft=buttonRight='松开双键';}
+  if(state.phase==='windup'){hint='松开双键 · 屈膝蓄力后伸腿蹬出';act=performancePose(state).label;buttonLeft=buttonRight='松开双键';}
+  if(state.phase==='rebound'){hint='器物贴脚下沉卸力 · 再伸腿蹬出';act=performancePose(state).label;buttonLeft=buttonRight='松开双键';}
   if(flight){
     hint=landing?(final?'双键一起短按 · 接稳这一记过关！':'双键一起短按 · 接住，顺势再蹬！'):'松开双键 · 等大缸落回、金圈亮起';
     act=landing?(final?'收！最后一记，双脚接稳':'接 · 蹬！双键一起按'):`第 ${state.kicks} 蹬 / ${l.target} 蹬${final?' · 压轴一记':state.kicks>1?' · 更高了！':' · 起！'}`;
@@ -148,6 +150,7 @@ function updateUI(){
     hint=landing?`${foot}脚单独按下接缸 · 这一拍不要双脚同按`:`预判：先${foot}脚${state.level===2?'，再等另一脚接上':'接住，再单脚扶平'}`;
     buttonLeft=state.firstFoot===-1?'左脚先接':'等右脚先接';buttonRight=state.firstFoot===1?'右脚先接':'等左脚先接';
   }
+  if(flight&&state.firstArmed){act='准备好了 · 等落到脚底';hint='先接住重量，再屈腿卸力';}
   if(state.phase==='support'){
     const flat=Math.abs(state.angle)<=.055,foot=state.angle>0?'右':'左';
     label=flat?'缸已扶平 · 双脚蹬':'单脚扶正 · 指针对准绿区';
@@ -180,21 +183,12 @@ function updateUI(){
   $('left-cue').style.opacity=chain?0:state.tapLeft*.8;$('right-cue').style.opacity=chain?0:state.tapRight*.8;
 }
 function drawImageCover(img,x,y,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale;ctx.drawImage(img,(img.width-sw)/2,(img.height-sh)/2,sw,sh,x,y,w,h);}
-function legBend(){
-  const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
-  if(state.phase==='windup'){const t=state.phaseTime/.46;return t<.72?150*smooth(t/.72):150-165*smooth((t-.72)/.28);}
-  if(state.phase==='rebound'){const t=state.phaseTime/.56;return t<.42?145*smooth(t/.42):t<.65?145:145-160*smooth((t-.65)/.35);}
-  if(state.phase==='support'||state.phase==='splitcatch')return 28;
-  if(state.phase==='flight')return -15*Math.max(0,1-state.phaseTime/.18);
-  if(state.phase==='celebrate')return 100*Math.sin(Math.min(1,(worldTime-lastCatchAt)/.7)*Math.PI);
-  return -Math.max(state.tapLeft,state.tapRight)*8;
-}
-function drawActor(angle){drawLegRig(ctx,assets[THEMES[state.level].actor],137,464,330,legBend(),state.phase==='support'||state.phase==='splitcatch'?state.angle*2.4:0);}
-function drawVat(angle){
-  const airborne=state.phase==='flight',bend=airborne?0:legBend()*330/1254;
-  const x=271,y=489-state.height*.44+bend;
+function drawActor(pose){drawLegRig(ctx,assets[THEMES[state.level].actor],137,464,330,pose.bend,pose.attached?pose.angle*2.4:0,pose.freeLeft,pose.freeRight);}
+function drawVat(pose){
+  const airborne=!pose.attached,angle=pose.angle;
+  const x=271,y=489+pose.offsetY;
   ctx.save();ctx.translate(x,y);ctx.rotate(angle);
-  const sway=1+Math.sin(spinPhase)*.008;ctx.scale(sway,1);
+  const sway=airborne?1+Math.sin(spinPhase)*.008:1;ctx.scale(sway,1);
   ctx.shadowColor='#14202b38';ctx.shadowBlur=12;ctx.shadowOffsetY=6;
   const theme=THEMES[state.level],[x0,y0,x1,y1]=theme.bounds,w=theme.width,h=w*(y1-y0)/(x1-x0);
   ctx.drawImage(assets[theme.object],x0,y0,x1-x0,y1-y0,-w/2,6-h,w,h);ctx.shadowColor='transparent';
@@ -205,7 +199,7 @@ function drawVat(angle){
   if(!airborne&&state.spin>.3){ctx.lineWidth=1.8;for(let i=0;i<2;i++){const a=spinPhase+i*Math.PI;ctx.strokeStyle=`rgba(255,232,182,${.18+state.spin*.1})`;ctx.beginPath();ctx.ellipse(0,-130,164,25,-.15,a,a+1.5);ctx.stroke();}}
   ctx.restore();
 }
-function drawFlightGuide(){
+function drawFlightGuide(pose){
   if(!['flight','support','splitcatch'].includes(state.phase))return;
   const l=LEVELS[state.level],landing=state.phase==='flight'&&state.vy<0&&state.height<=l.catchHeight;
   const support=state.phase==='support',split=state.phase==='splitcatch',flat=Math.abs(state.angle)<=.055;
@@ -216,8 +210,8 @@ function drawFlightGuide(){
     if(split)active=foot!==state.firstFoot&&state.phaseTime>=.18;
     const expected=state.level>0&&(split?foot!==state.firstFoot:foot===state.firstFoot);
     ctx.strokeStyle=active?'#ffe29a':expected?'#fff0c4aa':'#fff0c433';ctx.fillStyle=active?'#ffd56b55':'#fff0c40b';ctx.lineWidth=active?4:1.5;
-    ctx.beginPath();ctx.ellipse(x,501,29,12,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-    if(active){ctx.font='bold 21px serif';ctx.fillStyle='#fff0b4';ctx.strokeStyle='#624020';ctx.lineWidth=3;ctx.textAlign='center';ctx.strokeText(foot===-1?'左 A':'右 D',x,535);ctx.fillText(foot===-1?'左 A':'右 D',x,535);}
+    ctx.beginPath();ctx.ellipse(x,501+(pose.attached?pose.offsetY+(x-271)*Math.sin(pose.angle):0),29,12,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    if(active){ctx.font='bold 21px serif';ctx.fillStyle='#fff0b4';ctx.strokeStyle='#624020';ctx.lineWidth=3;ctx.textAlign='center';ctx.strokeText(foot===-1?'左 A':'右 D',x,535+(pose.attached?pose.offsetY:0));ctx.fillText(foot===-1?'左 A':'右 D',x,535+(pose.attached?pose.offsetY:0));}
   }
   ctx.restore();
 }
@@ -233,14 +227,16 @@ function render(dt){
     const jump=Math.sin(worldTime*15+phase)*cheerEnergy*3;ctx.save();ctx.beginPath();ctx.rect(dx,370,dw,310);ctx.clip();ctx.drawImage(img,sx*img.width,.38*img.height,sw*img.width,.38*img.height,dx,365+jump,dw,365);ctx.restore();}}
   ctx.fillStyle='#30271c2e';ctx.beginPath();ctx.ellipse(294,778,130,18,0,0,Math.PI*2);ctx.fill();
   const angle=screen==='intro'?Math.sin(worldTime*.7)*.035:clamp(state.angle,-.63,.63);
-  drawActor(angle);drawFlightGuide();drawVat(angle);
+  const pose=performancePose(state);if(screen==='intro')pose.angle=angle;
+  drawActor(pose);drawFlightGuide(pose);drawVat(pose);
+  if(pose.attached&&state.phase!=='balance'){ctx.save();ctx.globalAlpha=.35;ctx.fillStyle='#694526';for(const x of [239,313]){if(state.phase==='splitcatch'&&((x===239&&state.firstFoot===1)||(x===313&&state.firstFoot===-1)))continue;ctx.beginPath();ctx.ellipse(x,495+pose.offsetY+(x-271)*Math.sin(pose.angle),14,2.4,pose.angle,0,Math.PI*2);ctx.fill();}ctx.restore();}
   const flash=clamp(1-(worldTime-lastCatchAt)*2.2,0,1);
   if(flash>0){ctx.strokeStyle=`rgba(255,219,132,${flash})`;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(271,505,50+(1-flash)*160,18+(1-flash)*35,0,0,Math.PI*2);ctx.stroke();}
   ctx.restore();
   drawBubbles(dt);drawParticles(dt);
   if(screen==='playing'&&state.phase==='balance'&&state.danger>.5){ctx.fillStyle=`rgba(155,55,30,${Math.sin(worldTime*8)*.025+state.danger*.035})`;ctx.fillRect(0,0,540,960);}
 }
-function frame(now){const dt=Math.min((now-lastTime)/1000||.016,.12);lastTime=now;const animate=screen!=='paused'&&screen!=='about';if(animate){worldTime+=dt;spinPhase+=dt*(screen==='playing'?state.spin:0.7)*3;}if(screen==='playing'){let remaining=dt;while(remaining>0&&screen==='playing'){const tick=Math.min(remaining,1/60);step(state,tick,inputs);processEvents();remaining-=tick;}}if(tutorial)tickTutorial(dt);if(animate||screen==='intro')render(animate?dt:0);if(worldTime-lastUi>.065){updateUI();lastUi=worldTime;}if(worldTime>toastUntil)$('toast').classList.remove('show');if(worldTime>stampUntil)$('combo-stamp').classList.remove('show');requestAnimationFrame(frame);}
+function frame(now){const dt=Math.min((now-lastTime)/1000||.016,.12);lastTime=now;const animate=screen!=='paused'&&screen!=='about';if(animate){worldTime+=dt;spinPhase+=dt*(screen==='playing'?state.spin:0.7)*3;}if(screen==='playing'){let remaining=dt;while(remaining>0&&screen==='playing'){const tick=Math.min(remaining,1/60);step(state,tick,inputs);processEvents();remaining-=tick;}}if(tutorial)tickTutorial(dt);if(state.phase==='celebrate'&&animate)state.finishAge+=dt;if(animate||screen==='intro')render(animate?dt:0);if(worldTime-lastUi>.065){updateUI();lastUi=worldTime;}if(worldTime>toastUntil)$('toast').classList.remove('show');if(worldTime>stampUntil)$('combo-stamp').classList.remove('show');requestAnimationFrame(frame);}
 function roundBox(context,x,y,w,h,r){
   if(typeof context.roundRect==='function'){context.roundRect(x,y,w,h,r);return;}
   context.moveTo(x+r,y);context.lineTo(x+w-r,y);context.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -263,6 +259,6 @@ async function loadAssets(){
   render(0);
   window.WuqiaoBoot.ready();
 }
-window.WuqiaoBoot.status('正在启动游戏 · 场景与教学版 v6');
+window.WuqiaoBoot.status('正在启动游戏 · 接蹬动作版 v7');
 syncLayout();syncSave();updateUI();requestAnimationFrame(frame);
 loadAssets().catch(error=>{window.WuqiaoBoot.fail();console.error('Asset loading failed',error);});

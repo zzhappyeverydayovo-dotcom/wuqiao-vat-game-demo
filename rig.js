@@ -28,10 +28,10 @@ function triangle(ctx,img,p,q){
   q.forEach((v,i)=>{const length=Math.hypot(v.x-center.x,v.y-center.y)||1;const x=v.x+(v.x-center.x)/length*1.6,y=v.y+(v.y-center.y)/length*1.6;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.closePath();ctx.clip();
   ctx.transform(a,b,c,d,q[0].x-a*p[0].x-c*p[0].y,q[0].y-b*p[0].x-d*p[0].y);ctx.drawImage(img,0,0);ctx.restore();
 }
-export function drawLegRig(ctx,img,x,y,width,bend=0,tilt=0){
+export function drawLegRig(ctx,img,x,y,width,bend=0,tilt=0,freeLeft=0,freeRight=0){
   if(Math.abs(bend)<.05&&Math.abs(tilt)<.001){ctx.drawImage(img,x,y,width,width);return;}
   const poses=restLegs.map((leg,i)=>{
-    const ankle={x:leg.ankle.x,y:leg.ankle.y+bend+(i===0?-1:1)*tilt*55};
+    const ankle={x:leg.ankle.x,y:leg.ankle.y+bend+(i===0?freeLeft:freeRight)+(i===0?-1:1)*tilt*55};
     const thigh=Math.hypot(leg.knee.x-leg.hip.x,leg.knee.y-leg.hip.y),shin=Math.hypot(leg.ankle.x-leg.knee.x,leg.ankle.y-leg.knee.y);
     return {hip:leg.hip,ankle,knee:solveKnee(leg.hip,ankle,thigh,shin)};
   });
